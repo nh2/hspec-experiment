@@ -21,19 +21,6 @@ import           Test.QuickCheck.Property
 import PureAndSo
 
 
--- class Check a where
---   mkCheck :: String -> a -> Test
-
--- instance Check Bool where
---   mkCheck desc b = BoolTest desc b
-
--- instance (Check c) => Check (IO c) where
---   mkCheck desc ioc = IOTest desc (mkCheck "" <$> ioc)
-
-
--- data Test = BoolTest String Bool
---           -- | forall c . IOTest String (Check c => IO c)
---           | IOTest String (IO Test)
 
 instance Show Test where
   show t = case t of
@@ -52,7 +39,6 @@ instance Functor TestChain where
   fmap f (ChainEntry testg next) = ChainEntry testg (f next)
   fmap f (ChainDescribe s ftc next) = ChainDescribe s ftc (f next)
 
--- deriving instance Show a => Show (TestChain a)
 
 it :: (Partition t typ) => String -> t -> Free TestChain ()
 it desc test = liftF (ChainEntry (mkTestG test) ())
@@ -76,21 +62,27 @@ x3 = do
   it "test1" $ True
   it "test2" $ (return True :: IO Bool)
 
+data InTestNode = forall a . InTestNode { innode :: TestG a }
 
-data TestTree a = forall a . TestNode (TestG a)
+instance Show InTestNode where
+  show (InTestNode t) = case t of
+    MkPure t     -> "[pure] " ++ getDescription t
+    MkSemiPure t -> "[semipure] " ++ getDescription t
+    MkImpure t   -> "[impure] " ++ getDescription t
+
+
+data TestTree a = TestNode a
                 | Describe String [TestTree a]
-                -- deriving (Show, Functor, F.Foldable, Traversable)
+                deriving (Show, Functor, F.Foldable, Traversable)
 
--- deriving instance Show a => Show (TestTree a)
-instance Show (TestTree a) where
-  show (TestNode a) = "TestNode"
-  show (Describe desc subs) = "Describe " ++ desc ++ " " ++ show subs
+-- instance Show (TestTree a) where
+--   show (TestNode a) = "TestNode"
+--   show (Describe desc subs) = "Describe " ++ desc ++ " " ++ show subs
 
--- type Tests = TestTree (TestG a)
 
-testTree :: Free TestChain () -> [TestTree (TestG typ)]
+testTree :: Free TestChain () -> [TestTree InTestNode]
 testTree (Free x) = case x of
-  ChainEntry (test :: TestG typ) rest -> (TestNode test) : testTree rest
+  ChainEntry test rest -> (TestNode (InTestNode test)) : testTree rest
   ChainDescribe desc children rest -> (Describe desc (testTree children)) : testTree rest
 testTree (Pure ()) = []
 
@@ -101,13 +93,14 @@ t2 = testTree x2
 t3 = testTree x3
 
 
-showTestTree :: [TestTree (TestG a)] -> String
+showTestTree :: [TestTree InTestNode] -> String
 showTestTree = unlines . concatMap (indent more)
   where
     indent pad t = case t of
-      TestNode (MkPure t)    -> ["+ [pure] " ++ getDescription t] -- show test]
-      TestNode (MkSemiPure t)    -> ["+ [semipure] " ++ getDescription t] -- show test]
-      TestNode (MkImpure t)    -> ["+ [impure] " ++ getDescription t] -- show test]
+      TestNode (InTestNode test) -> case test of
+        MkPure t     -> ["+ [pure] " ++ getDescription t] -- show test]
+        MkSemiPure t -> ["+ [semipure] " ++ getDescription t] -- show test]
+        MkImpure t   -> ["+ [impure] " ++ getDescription t] -- show test]
       Describe desc st -> ["- " ++ desc] ++ concatMap (map pad . indent (more . pad)) st
     more = ("  " ++)
 
@@ -115,15 +108,12 @@ printTestTree = putStr . showTestTree
 
 
 -- TODO allow custom test return info
-runTestTree :: [TestTree (TestG a)] -> IO [TestTree (TestG a, SpecResult)]
--- runTestTree = mapM run
---   where
---     run t = case t of
---       TestNode test -> case test of
---         -- BoolTest desc b ->
+runTestTree :: [TestTree InTestNode] -> IO [TestTree (InTestNode, SpecResult)]
 runTestTree = traverse $ \x -> case x of
-  TestNode test -> case test of
+  TestNode x@(InTestNode test) -> case test of
     -- TODO not use default settings
-    MkPure t -> undefined -- return $ TestNode (test, resultPure defaultSettings t)
-    -- IOTest desc iotest -> do b <- iotest
-    --                          return $ TestNode (test, b, if b then Nothing else Just "returned false")
+    MkPure t -> return $ TestNode (x, resultPure defaultSettings t)
+    MkSemiPure t -> do result <- resultSemiPure defaultSettings t
+                       return $ TestNode (x, result)
+    MkImpure t -> do res <- resultImpure defaultSettings t
+                     return $ TestNode (x, res)
