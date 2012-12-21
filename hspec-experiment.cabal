@@ -1,0 +1,19 @@
+name:                hspec-experiment
+version:             0.1.0.0
+license:             MIT
+author:              Niklas Hambüchen
+maintainer:          mail@nh2.me
+build-type:          Simple
+cabal-version:       >=1.8
+
+library
+  exposed-modules:
+    Main
+    Clean
+  build-depends:
+      base ==4.5.*
+    , QuickCheck
+    , silently
+    , free
+    , containers
+    , mtl
