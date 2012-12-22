@@ -4,7 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module PureAndSo where
+module Tests where
 
 import           System.IO.Silently
 import qualified Test.QuickCheck as QC

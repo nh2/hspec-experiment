@@ -2,7 +2,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 
-module Clean where
+module Structure where
 
 import           Control.Applicative
 import           Control.Monad
@@ -11,7 +11,7 @@ import           Data.Maybe
 import           Data.Traversable hiding (mapM)
 import qualified Data.Foldable as F
 
-import PureAndSo
+import Tests
 
 
 -- Test existential
