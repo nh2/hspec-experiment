@@ -12,7 +12,8 @@ import           Control.Monad
 import           Control.Monad.Free
 import           Control.Monad.Reader
 import           Data.Tree
-import           Data.Traversable
+import           Data.Maybe
+import           Data.Traversable hiding (mapM)
 import qualified Data.Foldable as F
 import           System.IO.Silently
 import qualified Test.QuickCheck as QC
@@ -62,10 +63,10 @@ x3 = do
   it "test1" $ True
   it "test2" $ (return True :: IO Bool)
 
-data InTestNode = forall a . InTestNode { innode :: TestG a }
+data AnyTest = forall a . AnyTest { innode :: TestG a }
 
-instance Show InTestNode where
-  show (InTestNode t) = case t of
+instance Show AnyTest where
+  show (AnyTest t) = case t of
     MkPure t     -> "[pure] " ++ getDescription t
     MkSemiPure t -> "[semipure] " ++ getDescription t
     MkImpure t   -> "[impure] " ++ getDescription t
@@ -80,9 +81,9 @@ data TestTree a = TestNode a
 --   show (Describe desc subs) = "Describe " ++ desc ++ " " ++ show subs
 
 
-testTree :: Free TestChain () -> [TestTree InTestNode]
+testTree :: Free TestChain () -> [TestTree AnyTest]
 testTree (Free x) = case x of
-  ChainEntry test rest -> (TestNode (InTestNode test)) : testTree rest
+  ChainEntry test rest -> (TestNode (AnyTest test)) : testTree rest
   ChainDescribe desc children rest -> (Describe desc (testTree children)) : testTree rest
 testTree (Pure ()) = []
 
@@ -93,11 +94,11 @@ t2 = testTree x2
 t3 = testTree x3
 
 
-showTestTree :: [TestTree InTestNode] -> String
+showTestTree :: [TestTree AnyTest] -> String
 showTestTree = unlines . concatMap (indent more)
   where
     indent pad t = case t of
-      TestNode (InTestNode test) -> case test of
+      TestNode (AnyTest test) -> case test of
         MkPure t     -> ["+ [pure] " ++ getDescription t] -- show test]
         MkSemiPure t -> ["+ [semipure] " ++ getDescription t] -- show test]
         MkImpure t   -> ["+ [impure] " ++ getDescription t] -- show test]
@@ -108,12 +109,60 @@ printTestTree = putStr . showTestTree
 
 
 -- TODO allow custom test return info
-runTestTree :: [TestTree InTestNode] -> IO [TestTree (InTestNode, SpecResult)]
-runTestTree = traverse $ \x -> case x of
-  TestNode x@(InTestNode test) -> case test of
+resultTestTree :: [TestTree AnyTest] -> IO [TestTree (AnyTest, SpecResult)]
+resultTestTree = traverse $ \x -> case x of
+  TestNode x@(AnyTest test) -> case test of
     -- TODO not use default settings
     MkPure t -> return $ TestNode (x, resultPure defaultSettings t)
     MkSemiPure t -> do result <- resultSemiPure defaultSettings t
                        return $ TestNode (x, result)
     MkImpure t -> do res <- resultImpure defaultSettings t
                      return $ TestNode (x, res)
+  Describe desc st -> do ress <- resultTestTree st
+                         return $ Describe desc ress
+
+runTestTree :: [TestTree AnyTest] -> IO ()
+runTestTree ts = do
+  resTree <- resultTestTree ts
+  putStr (unlines $ concatMap (indent more) resTree)
+   where
+      indent :: (String -> String) -> TestTree (AnyTest, SpecResult) -> [String]
+      indent pad node = case node of
+        TestNode (AnyTest test, res) -> let r = resultToString res in case test of
+          MkPure t     -> ["+ [pure] " ++ getDescription t ++ " ... " ++ r]
+          MkSemiPure t -> ["+ [semipure] " ++ getDescription t ++ " ... " ++ r]
+          MkImpure t   -> ["+ [impure] " ++ getDescription t ++ " ... " ++ r]
+        Describe desc st -> let rss = map (map pad . indent (more . pad)) st
+                             in ["- " ++ desc] ++ concat rss
+      more = ("  " ++)
+
+
+-- Pure version (skips non-pure tests and runs without IO)
+
+resultTestTreePure :: [TestTree AnyTest] -> [TestTree (TestG PureT, SpecResult)]
+resultTestTreePure trees = catMaybes . flip map trees $ \x -> case x of
+  TestNode (AnyTest test) -> case test of
+    -- TODO not use default settings
+    MkPure t -> Just $ TestNode (test, resultPure defaultSettings t)
+    _        -> Nothing
+  Describe desc st -> Just $ Describe desc (resultTestTreePure st)
+
+runTestTreePure :: [TestTree AnyTest] -> String
+runTestTreePure ts = do
+  unlines $ concatMap (indent more) (resultTestTreePure ts)
+   where
+      indent :: (String -> String) -> TestTree (TestG PureT, SpecResult) -> [String]
+      indent pad node = case node of
+        TestNode (test, res) -> let r = resultToString res in case test of
+          MkPure t     -> ["+ [pure] " ++ getDescription t ++ " ... " ++ r]
+        Describe desc st -> let rss = map (map pad . indent (more . pad)) st
+                             in ["- " ++ desc] ++ concat rss
+      more = ("  " ++)
+
+
+
+resultToString :: SpecResult -> String
+resultToString r = case r of
+  Ok            -> "OK"
+  Fail          -> "FAIL"
+  FailMessage m -> "FAIL (" ++ m ++ ")"
