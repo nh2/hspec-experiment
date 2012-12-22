@@ -14,6 +14,7 @@ import           Control.Applicative
 
 data Settings = Settings
 
+defaultSettings :: Settings
 defaultSettings = Settings
 
 data SpecResult = Ok

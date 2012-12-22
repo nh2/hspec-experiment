@@ -17,3 +17,5 @@ library
     , free
     , containers
     , mtl
+  ghc-options:
+    -Wall -fwarn-unused-imports
