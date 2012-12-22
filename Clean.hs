@@ -20,9 +20,9 @@ data AnyTest = forall a . AnyTest { innode :: Test a }
 
 instance Show AnyTest where
   show (AnyTest test) = case test of
-    MkPure _     -> "[pure]"
-    MkSemiPure _ -> "[semipure]"
-    MkImpure _   -> "[impure]"
+    MkPure _ _     -> "[pure]"
+    MkSemiPure _ _ -> "[semipure]"
+    MkImpure _ _   -> "[impure]"
 
 
 -- Test chain functor for Free monad
@@ -82,9 +82,9 @@ showTestTree = unlines . concatMap (indent more)
   where
     indent pad t = case t of
       TestNode desc (AnyTest test) -> case test of
-        MkPure t     -> ["+ [pure] " ++ desc] -- show test]
-        MkSemiPure t -> ["+ [semipure] " ++ desc] -- show test]
-        MkImpure t   -> ["+ [impure] " ++ desc] -- show test]
+        MkPure _ _     -> ["+ [pure] " ++ desc] -- show test]
+        MkSemiPure _ _ -> ["+ [semipure] " ++ desc] -- show test]
+        MkImpure _ _   -> ["+ [impure] " ++ desc] -- show test]
       Describe desc st -> ["- " ++ desc] ++ concatMap (map pad . indent (more . pad)) st
     more = ("  " ++)
 
@@ -96,11 +96,11 @@ resultTestTree :: [TestTree AnyTest] -> IO [TestTree (AnyTest, SpecResult)]
 resultTestTree = traverse $ \tree -> case tree of
   TestNode desc x@(AnyTest test) -> case test of
     -- TODO not use default settings
-    MkPure t -> return $ TestNode desc (x, resultPure defaultSettings t)
-    MkSemiPure t -> do result <- resultSemiPure defaultSettings t
-                       return $ TestNode desc (x, result)
-    MkImpure t -> do res <- resultImpure defaultSettings t
-                     return $ TestNode desc (x, res)
+    MkPure resultFun t -> return $ TestNode desc (x, resultFun defaultSettings t)
+    MkSemiPure resultFun t -> do result <- resultFun defaultSettings t
+                                 return $ TestNode desc (x, result)
+    MkImpure resultFun t -> do res <- resultFun defaultSettings t
+                               return $ TestNode desc (x, res)
   Describe desc st -> do ress <- resultTestTree st
                          return $ Describe desc ress
 
@@ -124,8 +124,8 @@ resultTestTreePure :: [TestTree AnyTest] -> [TestTree (Test PureT, SpecResult)]
 resultTestTreePure trees = catMaybes . flip map trees $ \x -> case x of
   TestNode desc (AnyTest test) -> case test of
     -- TODO not use default settings
-    MkPure t -> Just $ TestNode desc (test, resultPure defaultSettings t)
-    _        -> Nothing
+    MkPure resultFun t -> Just $ TestNode desc (test, resultFun defaultSettings t)
+    _                  -> Nothing
   Describe desc st -> Just $ Describe desc (resultTestTreePure st)
 
 runTestTreePure :: [TestTree AnyTest] -> String
@@ -135,7 +135,7 @@ runTestTreePure ts = do
       indent :: (String -> String) -> TestTree (Test PureT, SpecResult) -> [String]
       indent pad node = case node of
         TestNode desc (test, res) -> let r = resultToString res in case test of
-          MkPure _t     -> ["+ [pure] " ++ desc ++ " ... " ++ r]
+          MkPure _resultFun _t -> ["+ [pure] " ++ desc ++ " ... " ++ r]
         Describe desc st -> let rss = map (map pad . indent (more . pad)) st
                              in ["- " ++ desc] ++ concat rss
       more = ("  " ++)

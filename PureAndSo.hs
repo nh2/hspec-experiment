@@ -9,7 +9,6 @@ module PureAndSo where
 import           System.IO.Silently
 import qualified Test.QuickCheck as QC
 import           Test.QuickCheck.Property
-import           Control.Applicative
 
 
 data Settings = Settings
@@ -30,15 +29,6 @@ resultToString r = case r of
   FailMessage m -> "FAIL (" ++ m ++ ")"
 
 
-class PureTest a where
-  resultPure :: Settings -> a -> SpecResult
-
-class SemiPureTest a where
-  resultSemiPure :: Settings -> a -> IO SpecResult
-
-class ImpureTest a where
-  resultImpure :: Settings -> a -> IO SpecResult
-
 
 data PureT = PureT
 data SemiPureT = SemiPureT
@@ -55,38 +45,50 @@ class SomeT typ => IsTest test typ | test -> typ where
 
 -- Possible alternative?: Put indrotduce + run function into GADT, change types (IO / non-IO) based on whether it's pure or not
 
-data Test t where
-  MkPure :: (IsTest t PureT, PureTest t) => t -> Test PureT
-  MkSemiPure :: (IsTest t SemiPureT, SemiPureTest t) => t -> Test SemiPureT
-  MkImpure :: (IsTest t ImpureT, ImpureTest t) => t -> Test ImpureT
 
+type RunFunctionPure a = Settings -> a -> SpecResult
+type RunFunctionSemiPure a = Settings -> a -> IO SpecResult
+type RunFunctionImpure a = Settings -> a -> IO SpecResult
+
+
+data Test t where
+  MkPure     :: (IsTest t PureT)     => RunFunctionPure t     -> t -> Test PureT
+  MkSemiPure :: (IsTest t SemiPureT) => RunFunctionSemiPure t -> t -> Test SemiPureT
+  MkImpure   :: (IsTest t ImpureT)   => RunFunctionImpure t   -> t -> Test ImpureT
+
+-- resultPure :: (IsTest t PureT) => Test PureT -> RunFunctionPure t
+-- resultPure (MkPure r _) = r
+-- resultSemiPure (MkSemiPure r _) = r
+-- resultImpure (MkImpure r _) = r
 
 
 -- IsTest instances
 
+resultBool :: RunFunctionPure Bool
+resultBool _ True  = Ok
+resultBool _ False = Fail
+
+
+resultProperty :: RunFunctionSemiPure Property
+resultProperty _settings p = do
+  r <- silence (QC.quickCheckResult p)
+  return $ case r of
+    QC.Success {}               -> Ok
+    f@(QC.Failure {})           -> FailMessage (QC.output f)
+    QC.GaveUp {QC.numTests = n} -> FailMessage ("Gave up after " ++ show n ++ "tests")
+    QC.NoExpectedFailure {}     -> FailMessage ("No expected failure")
+
+
 instance IsTest Bool PureT where
-  mkTest = MkPure
+  mkTest = MkPure resultBool
+
 instance IsTest Property SemiPureT where
-  mkTest = MkSemiPure
-instance PureTest a => IsTest (IO a) ImpureT where
-  mkTest = MkImpure
+  mkTest = MkSemiPure resultProperty
 
-
--- Test type instances
-
-instance PureTest Bool where
-  resultPure _ True  = Ok
-  resultPure _ False = Fail
-
-instance SemiPureTest Property where
-  resultSemiPure _settings p = do
-    r <- silence (QC.quickCheckResult p)
-    return $ case r of
-      QC.Success {}               -> Ok
-      f@(QC.Failure {})           -> FailMessage (QC.output f)
-      QC.GaveUp {QC.numTests = n} -> FailMessage ("Gave up after " ++ show n ++ "tests")
-      QC.NoExpectedFailure {}     -> FailMessage ("No expected failure")
-
-
-instance (PureTest t) => ImpureTest (IO t) where
-  resultImpure settings iob = resultPure settings <$> iob
+instance IsTest a PureT => IsTest (IO a) ImpureT where
+  mkTest = MkImpure f
+    where
+      f :: IsTest a PureT => RunFunctionImpure (IO a)
+      f settings iotest = do puretest <- iotest
+                             case mkTest puretest of
+                               MkPure run t -> return $ run settings t
