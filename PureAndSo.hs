@@ -43,33 +43,26 @@ instance SomeT ImpureT
 class SomeT typ => IsTest test typ | test -> typ where
   mkTest :: test -> Test typ
 
--- Possible alternative?: Put indrotduce + run function into GADT, change types (IO / non-IO) based on whether it's pure or not
 
-
-type RunFunctionPure a = Settings -> a -> SpecResult
-type RunFunctionSemiPure a = Settings -> a -> IO SpecResult
-type RunFunctionImpure a = Settings -> a -> IO SpecResult
+type ResultFunctionPure a = Settings -> a -> SpecResult
+type ResultFunctionSemiPure a = Settings -> a -> IO SpecResult
+type ResultFunctionImpure a = Settings -> a -> IO SpecResult
 
 
 data Test t where
-  MkPure     :: (IsTest t PureT)     => RunFunctionPure t     -> t -> Test PureT
-  MkSemiPure :: (IsTest t SemiPureT) => RunFunctionSemiPure t -> t -> Test SemiPureT
-  MkImpure   :: (IsTest t ImpureT)   => RunFunctionImpure t   -> t -> Test ImpureT
-
--- resultPure :: (IsTest t PureT) => Test PureT -> RunFunctionPure t
--- resultPure (MkPure r _) = r
--- resultSemiPure (MkSemiPure r _) = r
--- resultImpure (MkImpure r _) = r
+  MkPure     :: (IsTest t PureT)     => ResultFunctionPure t     -> t -> Test PureT
+  MkSemiPure :: (IsTest t SemiPureT) => ResultFunctionSemiPure t -> t -> Test SemiPureT
+  MkImpure   :: (IsTest t ImpureT)   => ResultFunctionImpure t   -> t -> Test ImpureT
 
 
 -- IsTest instances
 
-resultBool :: RunFunctionPure Bool
+resultBool :: ResultFunctionPure Bool
 resultBool _ True  = Ok
 resultBool _ False = Fail
 
 
-resultProperty :: RunFunctionSemiPure Property
+resultProperty :: ResultFunctionSemiPure Property
 resultProperty _settings p = do
   r <- silence (QC.quickCheckResult p)
   return $ case r of
@@ -88,7 +81,7 @@ instance IsTest Property SemiPureT where
 instance IsTest a PureT => IsTest (IO a) ImpureT where
   mkTest = MkImpure f
     where
-      f :: IsTest a PureT => RunFunctionImpure (IO a)
+      f :: IsTest a PureT => ResultFunctionImpure (IO a)
       f settings iotest = do puretest <- iotest
                              case mkTest puretest of
                                MkPure run t -> return $ run settings t

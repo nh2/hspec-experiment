@@ -134,8 +134,8 @@ runTestTreePure ts = do
    where
       indent :: (String -> String) -> TestTree (Test PureT, SpecResult) -> [String]
       indent pad node = case node of
-        TestNode desc (test, res) -> let r = resultToString res in case test of
-          MkPure _resultFun _t -> ["+ [pure] " ++ desc ++ " ... " ++ r]
+        TestNode desc (_test, res) -> let r = resultToString res
+                                       in ["+ [pure] " ++ desc ++ " ... " ++ r]
         Describe desc st -> let rss = map (map pad . indent (more . pad)) st
                              in ["- " ++ desc] ++ concat rss
       more = ("  " ++)
