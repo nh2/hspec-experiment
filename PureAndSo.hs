@@ -24,20 +24,16 @@ data SpecResult = Ok
 
 class Descriptable a where
   getDescription :: a -> String
-  -- mkTest :: String -> a -> Test
 
 
 instance Descriptable Bool where
   getDescription = show
-  -- mkTest desc b = PureTest desc b
 
 instance Descriptable Property where
   getDescription _ = "Property"
-  -- mkTest desc p = SemiPureTest desc p
 
 instance (Descriptable a) => Descriptable (IO a) where
   getDescription _ = "IO"
-  -- mkTest desc io = undefined -- ImpureTest desc io
 
 
 class (Descriptable a) => PureTest a where
@@ -50,12 +46,6 @@ class (Descriptable a) => ImpureTest a where
   resultImpure :: Settings -> a -> IO SpecResult
 
 
--- TODO use GADT?
-data Test = forall t . PureTest t => PureTest String t
-          | forall t . SemiPureTest t => SemiPureTest String t
-          | forall t . ImpureTest t => ImpureTest String t
-
--- data TestType = Pure | SemiPure | Impure
 data PureT = PureT
 data SemiPureT = SemiPureT
 data ImpureT = ImpureT
@@ -66,43 +56,23 @@ instance SomeT PureT
 instance SomeT SemiPureT
 instance SomeT ImpureT
 
-class SomeT typ => Partition test typ | test -> typ where
-  mkTestG :: test -> TestG typ
+class SomeT typ => IsTest test typ | test -> typ where
+  mkTest :: test -> Test typ
 
-instance Partition Bool PureT where
-  mkTestG = MkPure
-instance Partition Property SemiPureT where
-  mkTestG = MkSemiPure
-instance PureTest a => Partition (IO a) ImpureT where
-  mkTestG = MkImpure
-
-
--- data TestG a where
---   MkPure :: PureTest t => t -> TestG PureT
---   MkSemiPure :: SemiPureTest t => t -> TestG SemiPureT
---   MkImpure :: ImpureTest t => t -> TestG ImpureT
-
--- data TestG a where
---   MkPure :: PureTest t => t -> TestG t
---   MkSemiPure :: SemiPureTest t => t -> TestG t
---   MkImpure :: ImpureTest t => t -> TestG t
-
-
--- class TestableG a where
---   mkTestG :: a -> TestG a
-
--- instance TestableG Bool where
---   mkTestG b = MkPure b
-
--- x = mkTestG True
+instance IsTest Bool PureT where
+  mkTest = MkPure
+instance IsTest Property SemiPureT where
+  mkTest = MkSemiPure
+instance PureTest a => IsTest (IO a) ImpureT where
+  mkTest = MkImpure
 
 
 -- Possible alternative?: Put indrotduce + run function into GADT, change types (IO / non-IO) based on whether it's pure or not
 
-data TestG t where
-  MkPure :: (Partition t PureT, PureTest t) => t -> TestG PureT
-  MkSemiPure :: (Partition t SemiPureT, SemiPureTest t) => t -> TestG SemiPureT
-  MkImpure :: (Partition t ImpureT, ImpureTest t) => t -> TestG ImpureT
+data Test t where
+  MkPure :: (IsTest t PureT, PureTest t) => t -> Test PureT
+  MkSemiPure :: (IsTest t SemiPureT, SemiPureTest t) => t -> Test SemiPureT
+  MkImpure :: (IsTest t ImpureT, ImpureTest t) => t -> Test ImpureT
 
 
 
@@ -121,15 +91,5 @@ instance SemiPureTest Property where
       QC.NoExpectedFailure {}     -> FailMessage ("No expected failure")
 
 
--- instance ImpureTest (IO Bool) where
---   resultImpure settings iob = resultPure settings <$> iob
-
 instance (PureTest t) => ImpureTest (IO t) where
   resultImpure settings iob = resultPure settings <$> iob
-
--- instance (SemiPureTest t) => ImpureTest (IO t) where
---   resultImpure settings iob = resultSemiPure settings <$> iob
-
--- instance (PureTest t) => ImpureTest (IO t) where
---   resultImpure settings iob = resultPure settings <$> iob
-

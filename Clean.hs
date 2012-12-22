@@ -22,18 +22,7 @@ import           Test.QuickCheck.Property
 import PureAndSo
 
 
-
-instance Show Test where
-  show t = case t of
-    PureTest s t -> "PureTest " ++ s ++ " " ++ getDescription t
-    SemiPureTest s t -> "SemiPureTest " ++ s ++ " " ++ getDescription t
-    ImpureTest s t -> "ImpureTest " ++ s ++ " " ++ getDescription t
-
--- data TestChain next = ChainEntry (Partition t typ => TestG typ) next
---                     | ChainDescribe String (Free TestChain ()) next
---                     deriving (Functor)
-
-data TestChain next = {-forall t typ . Partition t typ-} forall typ . SomeT typ => ChainEntry (TestG typ) next
+data TestChain next = forall typ . SomeT typ => ChainEntry (Test typ) next
                     | ChainDescribe String (Free TestChain ()) next
 
 instance Functor TestChain where
@@ -41,8 +30,8 @@ instance Functor TestChain where
   fmap f (ChainDescribe s ftc next) = ChainDescribe s ftc (f next)
 
 
-it :: (Partition t typ) => String -> t -> Free TestChain ()
-it desc test = liftF (ChainEntry (mkTestG test) ())
+it :: (IsTest t typ) => String -> t -> Free TestChain ()
+it desc test = liftF (ChainEntry (mkTest test) ())
 
 describe :: String -> Free TestChain () -> Free TestChain ()
 describe desc childrenChain = liftF (ChainDescribe desc childrenChain ())
@@ -63,7 +52,7 @@ x3 = do
   it "test1" $ True
   it "test2" $ (return True :: IO Bool)
 
-data AnyTest = forall a . AnyTest { innode :: TestG a }
+data AnyTest = forall a . AnyTest { innode :: Test a }
 
 instance Show AnyTest where
   show (AnyTest t) = case t of
@@ -75,10 +64,6 @@ instance Show AnyTest where
 data TestTree a = TestNode a
                 | Describe String [TestTree a]
                 deriving (Show, Functor, F.Foldable, Traversable)
-
--- instance Show (TestTree a) where
---   show (TestNode a) = "TestNode"
---   show (Describe desc subs) = "Describe " ++ desc ++ " " ++ show subs
 
 
 testTree :: Free TestChain () -> [TestTree AnyTest]
@@ -139,7 +124,7 @@ runTestTree ts = do
 
 -- Pure version (skips non-pure tests and runs without IO)
 
-resultTestTreePure :: [TestTree AnyTest] -> [TestTree (TestG PureT, SpecResult)]
+resultTestTreePure :: [TestTree AnyTest] -> [TestTree (Test PureT, SpecResult)]
 resultTestTreePure trees = catMaybes . flip map trees $ \x -> case x of
   TestNode (AnyTest test) -> case test of
     -- TODO not use default settings
@@ -151,7 +136,7 @@ runTestTreePure :: [TestTree AnyTest] -> String
 runTestTreePure ts = do
   unlines $ concatMap (indent more) (resultTestTreePure ts)
    where
-      indent :: (String -> String) -> TestTree (TestG PureT, SpecResult) -> [String]
+      indent :: (String -> String) -> TestTree (Test PureT, SpecResult) -> [String]
       indent pad node = case node of
         TestNode (test, res) -> let r = resultToString res in case test of
           MkPure t     -> ["+ [pure] " ++ getDescription t ++ " ... " ++ r]
