@@ -22,6 +22,13 @@ data SpecResult = Ok
                 deriving (Eq, Show)
 
 
+resultToString :: SpecResult -> String
+resultToString r = case r of
+  Ok            -> "OK"
+  Fail          -> "FAIL"
+  FailMessage m -> "FAIL (" ++ m ++ ")"
+
+
 class Descriptable a where
   getDescription :: a -> String
 

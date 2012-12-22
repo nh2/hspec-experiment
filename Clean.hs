@@ -22,20 +22,47 @@ import           Test.QuickCheck.Property
 import PureAndSo
 
 
-data TestChain next = forall typ . SomeT typ => ChainEntry (Test typ) next
+-- Test existential
+
+data AnyTest = forall a . AnyTest { innode :: Test a }
+
+instance Show AnyTest where
+  show (AnyTest t) = case t of
+    MkPure t     -> "[pure] " ++ getDescription t
+    MkSemiPure t -> "[semipure] " ++ getDescription t
+    MkImpure t   -> "[impure] " ++ getDescription t
+
+
+-- Test chain functor for Free monad
+
+data TestChain next = ChainEntry AnyTest next
                     | ChainDescribe String (Free TestChain ()) next
+                    deriving (Functor)
 
-instance Functor TestChain where
-  fmap f (ChainEntry testg next) = ChainEntry testg (f next)
-  fmap f (ChainDescribe s ftc next) = ChainDescribe s ftc (f next)
 
+-- Test structure
 
 it :: (IsTest t typ) => String -> t -> Free TestChain ()
-it desc test = liftF (ChainEntry (mkTest test) ())
+it desc test = liftF (ChainEntry (AnyTest (mkTest test)) ())
 
 describe :: String -> Free TestChain () -> Free TestChain ()
 describe desc childrenChain = liftF (ChainDescribe desc childrenChain ())
 
+
+-- Test chain functor to test tree
+
+data TestTree a = TestNode a
+                | Describe String [TestTree a]
+                deriving (Show, Functor, F.Foldable, Traversable)
+
+testTree :: Free TestChain () -> [TestTree AnyTest]
+testTree (Free x) = case x of
+  ChainEntry anyTest rest -> (TestNode anyTest) : testTree rest
+  ChainDescribe desc children rest -> (Describe desc (testTree children)) : testTree rest
+testTree (Pure ()) = []
+
+
+-- Examples
 
 x1 = do
   it "test1" $ True
@@ -52,25 +79,6 @@ x3 = do
   it "test1" $ True
   it "test2" $ (return True :: IO Bool)
 
-data AnyTest = forall a . AnyTest { innode :: Test a }
-
-instance Show AnyTest where
-  show (AnyTest t) = case t of
-    MkPure t     -> "[pure] " ++ getDescription t
-    MkSemiPure t -> "[semipure] " ++ getDescription t
-    MkImpure t   -> "[impure] " ++ getDescription t
-
-
-data TestTree a = TestNode a
-                | Describe String [TestTree a]
-                deriving (Show, Functor, F.Foldable, Traversable)
-
-
-testTree :: Free TestChain () -> [TestTree AnyTest]
-testTree (Free x) = case x of
-  ChainEntry test rest -> (TestNode (AnyTest test)) : testTree rest
-  ChainDescribe desc children rest -> (Describe desc (testTree children)) : testTree rest
-testTree (Pure ()) = []
 
 t = testTree
 
@@ -143,11 +151,3 @@ runTestTreePure ts = do
         Describe desc st -> let rss = map (map pad . indent (more . pad)) st
                              in ["- " ++ desc] ++ concat rss
       more = ("  " ++)
-
-
-
-resultToString :: SpecResult -> String
-resultToString r = case r of
-  Ok            -> "OK"
-  Fail          -> "FAIL"
-  FailMessage m -> "FAIL (" ++ m ++ ")"
