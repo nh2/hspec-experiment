@@ -53,14 +53,6 @@ instance SomeT ImpureT
 class SomeT typ => IsTest test typ | test -> typ where
   mkTest :: test -> Test typ
 
-instance IsTest Bool PureT where
-  mkTest = MkPure
-instance IsTest Property SemiPureT where
-  mkTest = MkSemiPure
-instance PureTest a => IsTest (IO a) ImpureT where
-  mkTest = MkImpure
-
-
 -- Possible alternative?: Put indrotduce + run function into GADT, change types (IO / non-IO) based on whether it's pure or not
 
 data Test t where
@@ -70,6 +62,17 @@ data Test t where
 
 
 
+-- IsTest instances
+
+instance IsTest Bool PureT where
+  mkTest = MkPure
+instance IsTest Property SemiPureT where
+  mkTest = MkSemiPure
+instance PureTest a => IsTest (IO a) ImpureT where
+  mkTest = MkImpure
+
+
+-- Test type instances
 
 instance PureTest Bool where
   resultPure _ True  = Ok
