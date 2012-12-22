@@ -30,27 +30,13 @@ resultToString r = case r of
   FailMessage m -> "FAIL (" ++ m ++ ")"
 
 
-class Descriptable a where
-  getDescription :: a -> String
-
-
-instance Descriptable Bool where
-  getDescription = show
-
-instance Descriptable Property where
-  getDescription _ = "Property"
-
-instance (Descriptable a) => Descriptable (IO a) where
-  getDescription _ = "IO"
-
-
-class (Descriptable a) => PureTest a where
+class PureTest a where
   resultPure :: Settings -> a -> SpecResult
 
-class (Descriptable a) => SemiPureTest a where
+class SemiPureTest a where
   resultSemiPure :: Settings -> a -> IO SpecResult
 
-class (Descriptable a) => ImpureTest a where
+class ImpureTest a where
   resultImpure :: Settings -> a -> IO SpecResult
 
 

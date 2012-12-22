@@ -1,8 +1,5 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 
 module Clean where
@@ -23,9 +20,9 @@ data AnyTest = forall a . AnyTest { innode :: Test a }
 
 instance Show AnyTest where
   show (AnyTest test) = case test of
-    MkPure t     -> "[pure] " ++ getDescription t
-    MkSemiPure t -> "[semipure] " ++ getDescription t
-    MkImpure t   -> "[impure] " ++ getDescription t
+    MkPure _     -> "[pure]"
+    MkSemiPure _ -> "[semipure]"
+    MkImpure _   -> "[impure]"
 
 
 -- Test chain functor for Free monad
@@ -96,7 +93,7 @@ printTestTree = putStr . showTestTree
 
 -- TODO allow custom test return info
 resultTestTree :: [TestTree AnyTest] -> IO [TestTree (AnyTest, SpecResult)]
-resultTestTree = traverse $ \x -> case x of
+resultTestTree = traverse $ \tree -> case tree of
   TestNode desc x@(AnyTest test) -> case test of
     -- TODO not use default settings
     MkPure t -> return $ TestNode desc (x, resultPure defaultSettings t)
@@ -114,10 +111,8 @@ runTestTree ts = do
    where
       indent :: (String -> String) -> TestTree (AnyTest, SpecResult) -> [String]
       indent pad node = case node of
-        TestNode desc (AnyTest test, res) -> let r = resultToString res in case test of
-          MkPure t     -> ["+ [pure] " ++ desc ++ " ... " ++ r]
-          MkSemiPure t -> ["+ [semipure] " ++ desc ++ " ... " ++ r]
-          MkImpure t   -> ["+ [impure] " ++ desc ++ " ... " ++ r]
+        TestNode desc (anyTest, res) -> let r = resultToString res
+                                         in ["+ " ++ show anyTest ++ " " ++ desc ++ " ... " ++ r]
         Describe desc st -> let rss = map (map pad . indent (more . pad)) st
                              in ["- " ++ desc] ++ concat rss
       more = ("  " ++)
@@ -140,7 +135,7 @@ runTestTreePure ts = do
       indent :: (String -> String) -> TestTree (Test PureT, SpecResult) -> [String]
       indent pad node = case node of
         TestNode desc (test, res) -> let r = resultToString res in case test of
-          MkPure t     -> ["+ [pure] " ++ getDescription t ++ " ... " ++ r]
+          MkPure _t     -> ["+ [pure] " ++ desc ++ " ... " ++ r]
         Describe desc st -> let rss = map (map pad . indent (more . pad)) st
                              in ["- " ++ desc] ++ concat rss
       more = ("  " ++)
