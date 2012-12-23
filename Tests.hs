@@ -1,9 +1,7 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
-{-# LANGUAGE ExistentialQuantification, RankNTypes #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs, FlexibleInstances, ExistentialQuantification, FunctionalDependencies, FlexibleContexts #-}
 
+-- | Defines what tests are.
+-- Tests have a run function and belong to one of three types: Pure, SemiPure, or Impure.
 module Tests where
 
 import           System.IO.Silently
@@ -11,10 +9,15 @@ import qualified Test.QuickCheck as QC
 import           Test.QuickCheck.Property
 
 
+-- Settings
+
 data Settings = Settings
 
 defaultSettings :: Settings
 defaultSettings = Settings
+
+
+-- Results
 
 data SpecResult = Ok
                 | Fail
@@ -29,10 +32,11 @@ resultToString r = case r of
   FailMessage m -> "FAIL (" ++ m ++ ")"
 
 
+-- Test types
 
-data PureT = PureT
-data SemiPureT = SemiPureT
-data ImpureT = ImpureT
+data PureT     = PureT     deriving (Show)
+data SemiPureT = SemiPureT deriving (Show)
+data ImpureT   = ImpureT   deriving (Show)
 
 class SomeT a where
 
@@ -40,29 +44,52 @@ instance SomeT PureT
 instance SomeT SemiPureT
 instance SomeT ImpureT
 
+
+-- IsTest class (fundep for every test can only be one of pure/semipure/impure)
+
 class SomeT typ => IsTest test typ | test -> typ where
   mkTest :: test -> Test typ
 
 
-type ResultFunctionPure a = Settings -> a -> SpecResult
-type ResultFunctionSemiPure a = Settings -> a -> IO SpecResult
-type ResultFunctionImpure a = Settings -> a -> IO SpecResult
+-- TestRunFunction aliases
 
+type TestRunFunctionPure a     = Settings -> a -> SpecResult
+type TestRunFunctionSemiPure a = Settings -> a -> IO SpecResult
+type TestRunFunctionImpure a   = Settings -> a -> IO SpecResult
+
+
+-- Test GADT
+-- Contains the test itself and a way to run it to a result.
 
 data Test t where
-  MkPure     :: (IsTest t PureT)     => ResultFunctionPure t     -> t -> Test PureT
-  MkSemiPure :: (IsTest t SemiPureT) => ResultFunctionSemiPure t -> t -> Test SemiPureT
-  MkImpure   :: (IsTest t ImpureT)   => ResultFunctionImpure t   -> t -> Test ImpureT
+  MkPure     :: (IsTest t PureT)     => TestRunFunctionPure t     -> t -> Test PureT
+  MkSemiPure :: (IsTest t SemiPureT) => TestRunFunctionSemiPure t -> t -> Test SemiPureT
+  MkImpure   :: (IsTest t ImpureT)   => TestRunFunctionImpure t   -> t -> Test ImpureT
+
+
+instance Show (Test t) where
+  show test = case test of
+    MkPure _ _     -> "[pure]"
+    MkSemiPure _ _ -> "[semipure]"
+    MkImpure _ _   -> "[impure]"
+
+
+-- Test existential
+
+data AnyTest = forall a . AnyTest { innode :: Test a }
+
+instance Show AnyTest where
+  show (AnyTest test) = show test
 
 
 -- IsTest instances
 
-resultBool :: ResultFunctionPure Bool
+resultBool :: TestRunFunctionPure Bool
 resultBool _ True  = Ok
 resultBool _ False = Fail
 
 
-resultProperty :: ResultFunctionSemiPure Property
+resultProperty :: TestRunFunctionSemiPure Property
 resultProperty _settings p = do
   r <- silence (QC.quickCheckResult p)
   return $ case r of
@@ -81,7 +108,7 @@ instance IsTest Property SemiPureT where
 instance IsTest a PureT => IsTest (IO a) ImpureT where
   mkTest = MkImpure f
     where
-      f :: IsTest a PureT => ResultFunctionImpure (IO a)
+      f :: IsTest a PureT => TestRunFunctionImpure (IO a)
       f settings iotest = do puretest <- iotest
                              case mkTest puretest of
                                MkPure run t -> return $ run settings t

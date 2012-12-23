@@ -10,6 +10,9 @@ library
   exposed-modules:
     Tests
     Structure
+    Run
+  other-modules:
+    Examples
   build-depends:
       base ==4.5.*
     , QuickCheck
