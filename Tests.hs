@@ -2,6 +2,23 @@
 
 -- | Defines what tests are.
 -- Tests have a run function and belong to one of three types: Pure, SemiPure, or Impure.
+--
+-- * Pure tests are tests without IO side effects.
+-- * SemiPure tests have read-only side effects and must not influence each other.
+--   Example: Normal QuickCheck properties.
+-- * Impure tests have IO side effects that may influence each other.
+--
+-- Pure and SemiPure tests should be expected to run in parallel.
+-- Impure tests should be expected not to run in parallel unless annotated explicitly.
+--
+-- Some more examples for choosing between SemiPure and Impure:
+--
+-- * Writing something to a file, then deleting that file.
+--   -> Impure, because parallel tests could fail to write to the same file.
+-- * Connecting to a socket and asking for information.
+--   -> Impure, because you might run out of sockets when run in parallel.
+-- * A QuickCheck property about pure functions that needs random numbers to run.
+--   -> SemiPure, because they do not influence each other.
 module Tests where
 
 import           System.IO.Silently

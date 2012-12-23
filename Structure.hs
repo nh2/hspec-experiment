@@ -1,6 +1,17 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
 
+-- | Describes the structure of tests.
+-- Tests are assembled in monadic notation using `it` and `describe`.
+--
+-- Eventually, this describes a tree where describes are the inner nodes
+-- and the actual tests are the leaves.
+--
+-- With the Tree being pure data, it can easily be filtered, re-ordered,
+-- or modified.
+-- Test nodes can contain tests of any of the three types Pure, SemiPure
+-- or Impure (wrapped by the `AnyTest` existential), but can be
+-- pattern-matched to reveal their type.
 module Structure where
 
 import           Control.Monad.Free
@@ -10,7 +21,11 @@ import qualified Data.Traversable as T
 import Tests
 
 
--- Test chain functor for Free monad
+-- Test chain functor for the Free Monad.
+-- The allows us to get a tree "for free" using do-notation.
+
+-- Inspired by:
+-- http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html
 
 data TestChain next = ChainEntry String AnyTest next
                     | ChainDescribe String (Free TestChain ()) next
